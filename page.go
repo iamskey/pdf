@@ -585,7 +585,7 @@ func (p Page) GetTextByColumn() (Columns, error) {
 		}
 	}()
 
-	showText := func(enc TextEncoding, currentX, currentY float64, s string) {
+	showText := func(enc TextEncoding, currentX, currentY float64, s, fontName string) {
 		var textBuilder bytes.Buffer
 
 		for _, ch := range enc.Decode(s) {
@@ -655,7 +655,7 @@ func (p Page) GetTextByRow() (Rows, error) {
 		}
 	}()
 
-	showText := func(enc TextEncoding, currentX, currentY float64, s string) {
+	showText := func(enc TextEncoding, currentX, currentY float64, s, fontName string) {
 		var textBuilder bytes.Buffer
 		for _, ch := range enc.Decode(s) {
 			_, err := textBuilder.WriteRune(ch)
@@ -669,9 +669,10 @@ func (p Page) GetTextByRow() (Rows, error) {
 		// }
 
 		text := Text{
-			S: textBuilder.String(),
-			X: currentX,
-			Y: currentY,
+			S:    textBuilder.String(),
+			X:    currentX,
+			Y:    currentY,
+			Font: fontName,
 		}
 
 		var currentRow *Row
@@ -708,7 +709,7 @@ func (p Page) GetTextByRow() (Rows, error) {
 	return result, err
 }
 
-func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s string)) {
+func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s, fontName string)) {
 	strm := p.V.Key("Contents")
 
 	fonts := make(map[string]*Font)
@@ -717,6 +718,7 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 		fonts[font] = &f
 	}
 
+	var fontName string
 	var enc TextEncoding = &nopEncoder{}
 	var currentX, currentY float64
 	Interpret(strm, func(stk *Stack, op string) {
@@ -740,6 +742,7 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 			}
 
 			if font, ok := fonts[args[0].Name()]; ok {
+				fontName = args[0].Name()
 				enc = font.Encoder()
 			} else {
 				enc = &nopEncoder{}
@@ -759,17 +762,17 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 				panic("bad Tj operator")
 			}
 
-			walker(enc, currentX, currentY, args[0].RawString())
+			walker(enc, currentX, currentY, args[0].RawString(), fontName)
 		case "TJ": // show text, allowing individual glyph positioning
 			v := args[0]
 			for i := 0; i < v.Len(); i++ {
 				x := v.Index(i)
 				if x.Kind() == String {
-					walker(enc, currentX, currentY, x.RawString())
+					walker(enc, currentX, currentY, x.RawString(), fontName)
 				}
 			}
 		case "Td":
-			walker(enc, currentX, currentY, "")
+			walker(enc, currentX, currentY, "", fontName)
 		case "Tm":
 			currentX = args[4].Float64()
 			currentY = args[5].Float64()
